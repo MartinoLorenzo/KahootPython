@@ -1,23 +1,20 @@
 import socket
 
-my_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+client = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 nome = input("Inserisci il tuo nome: ")
+client.sendto(nome.encode(), ("127.0.0.1", 5007))
 
-# Invia il nome al server per registrarsi
-my_socket.sendto(nome.encode("utf-8"), ("127.0.0.1", 5007))
-
-for i in range(4):
-    # Ricevi la domanda dal server
-    domanda, _ = my_socket.recvfrom(1024)
+for _ in range(4):
+    domanda, _ = client.recvfrom(1024)
     print("\nDomanda:")
-    print(domanda.decode("utf-8"))
+    print(domanda.decode())
 
-    # Ricevi risposta dall'utente
     risposta = input("Scrivi la tua risposta (1-4): ")
+    client.sendto(risposta.encode(), ("127.0.0.1", 5007))
 
-    # Invia risposta al server
-    my_socket.sendto(risposta.encode("utf-8"), ("127.0.0.1", 5007))
+print("In attesa della classifica...")
+classifica, _ = client.recvfrom(1024)
+print("\n" + classifica.decode())
 
-print("Risposte inviate. Attendi i risultati.")
-my_socket.close()
+client.close()
