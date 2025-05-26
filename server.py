@@ -3,86 +3,101 @@ import time
 
 MAX_CLIENT = 4
 WAIT_SECONDS = 30
+RESPONSE_TIMEOUT = 10
 
 domande = [
-    ("Quanto fa 2 + 2?\n1) 1\n2) 2\n3) 4\n4) 5", "3"),
-    ("In che linguaggio è scritto questo server?\n1) Java\n2) Python\n3) C#\n4) HTML", "2"),
-    ("Qual è il colore del cielo?\n1) Rosso\n2) Blu\n3) Verde\n4) Giallo", "2"),
-    ("Quanti giorni ha una settimana?\n1) 5\n2) 6\n3) 7\n4) 8", "3")
+    ("Quanto fa 2 + 2?", ["1", "2", "4", "5"], "3"),
+    ("In che linguaggio è scritto questo server?", ["Java", "Python", "C#", "HTML"], "2"),
+    ("Colore del cielo?", ["Rosso", "Blu", "Verde", "Giallo"], "2"),
+    ("Giorni della settimana?", ["5", "6", "7", "8"], "3")
 ]
 
-server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-server.bind(('127.0.0.1', 5007))
-server.settimeout(1)
+def start_quiz():
+    while True:
+        server = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        server.bind(("127.0.0.1", 5007))
+        server.settimeout(1)
 
-clienti = {}
-punteggi = {}
+        clienti = {}
+        punteggi = {}
+        nomi_usati = set()
 
-print(f"Aspetto massimo {MAX_CLIENT} giocatori per {WAIT_SECONDS} secondi...")
-start = time.time()
+        print(f"\n[SERVER] In attesa di massimo {MAX_CLIENT} giocatori per {WAIT_SECONDS} secondi...")
 
-# Attesa client
-while len(clienti) < MAX_CLIENT and (time.time() - start) < WAIT_SECONDS:
-    try:
-        msg, addr = server.recvfrom(1024)
-        nome = msg.decode().strip()
-        if addr not in clienti:
-            clienti[addr] = nome
-            punteggi[nome] = 0
-            print(f"{nome} connesso da {addr}")
-    except socket.timeout:
-        pass
+        start = time.time()
+        while len(clienti) < MAX_CLIENT and (time.time() - start) < WAIT_SECONDS:
+            try:
+                msg, addr = server.recvfrom(1024)
+                nome = msg.decode().strip()
 
-num_giocatori = len(clienti)
-if num_giocatori == 0:
-    print("Nessun giocatore connesso.")
-    server.close()
-    exit()
+                if not nome:
+                    continue  # ignora nomi vuoti
+                if nome in nomi_usati:
+                    server.sendto(b"ERRORE_NOME", addr)
+                    continue
 
-print(f"\nInizio quiz con {num_giocatori} giocatori.")
+                if addr not in clienti:
+                    clienti[addr] = nome
+                    nomi_usati.add(nome)
+                    punteggi[nome] = 0
+                    print(f"[SERVER] {nome} connesso da {addr}")
 
-# Invia messaggio di inizio
-for addr in clienti:
-    server.sendto(b"INIZIO", addr)
+                    elenco = "GIOCATORI:\n" + "\n".join(clienti.values())
+                    for a in clienti:
+                        server.sendto(elenco.encode(), a)
 
-# Domande
-for idx, (testo, corretta) in enumerate(domande, start=1):
-    print(f"\nDomanda {idx}:")
-    print(testo)
+            except socket.timeout:
+                continue
 
-    for addr in clienti:
-        server.sendto(testo.encode(), addr)
-
-    ricevuti = set()
-    risposte_domanda = {}
-
-    while len(ricevuti) < num_giocatori:
-        try:
-            msg, addr = server.recvfrom(1024)
-            if addr in clienti and addr not in ricevuti:
-                risposta = msg.decode().strip()
-                nome = clienti[addr]
-                risposte_domanda[nome] = risposta
-                if risposta == corretta:
-                    punteggi[nome] += 1
-                ricevuti.add(addr)
-        except socket.timeout:
+        if not clienti:
+            print("[SERVER] Nessun giocatore connesso.")
+            server.close()
             continue
 
-    print("Risposte ricevute:")
-    for nome, risposta in risposte_domanda.items():
-        stato = "corretta" if risposta == corretta else "sbagliata"
-        print(f"{nome} ha risposto: {risposta} ({stato})")
+        for addr in clienti:
+            server.sendto(b"INIZIO", addr)
 
-# Classifica finale
-classifica = "--- Classifica Finale ---\n"
-for nome, punti in punteggi.items():
-    classifica += f"{nome}: {punti} punti\n"
+        for domanda, opzioni, corretta in domande:
+            for addr in list(clienti.keys()):
+                try:
+                    server.sendto(f"{domanda}|{'|'.join(opzioni)}".encode(), addr)
+                except:
+                    nome = clienti[addr]
+                    print(f"[SERVER] Disconnesso: {nome}")
+                    nomi_usati.remove(nome)
+                    del punteggi[nome]
+                    del clienti[addr]
 
-print("\n" + classifica.strip())
+            ricevuti = set()
+            start_time = time.time()
 
-# Invia classifica ai client
-for addr in clienti:
-    server.sendto(classifica.encode(), addr)
+            while len(ricevuti) < len(clienti) and (time.time() - start_time) < RESPONSE_TIMEOUT:
+                try:
+                    msg, addr = server.recvfrom(1024)
+                    if addr in clienti and addr not in ricevuti:
+                        risposta = msg.decode().strip()
+                        nome = clienti[addr]
+                        if risposta == corretta:
+                            punteggi[nome] += 1
+                        ricevuti.add(addr)
+                except socket.timeout:
+                    continue
+                except:
+                    if addr in clienti:
+                        nome = clienti[addr]
+                        print(f"[SERVER] Disconnesso: {nome}")
+                        nomi_usati.remove(nome)
+                        del punteggi[nome]
+                        del clienti[addr]
 
-server.close()
+        classifica = "--- Classifica Finale ---\n"
+        for nome, punti in sorted(punteggi.items(), key=lambda x: x[1], reverse=True):
+            classifica += f"{nome}: {punti} punti\n"
+
+        for addr in clienti:
+            server.sendto(classifica.encode(), addr)
+
+        server.close()
+        print("[SERVER] Partita conclusa. In attesa di nuova partita...\n")
+
+start_quiz()
