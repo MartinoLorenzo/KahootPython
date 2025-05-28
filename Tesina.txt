@@ -1,0 +1,5 @@
+| Problema                                  | Soluzione                           |
+| ----------------------------------------- | ----------------------------------- |
+| I browser non supportano socket TCP       | Uso di Flask-SocketIO con WebSocket |
+| Generare QR dinamico in pagina            | Uso di `qrcode.js` con JavaScript   |
+| Sincronizzazione tra admin e partecipanti | SocketIO per eventi in tempo reale  |
