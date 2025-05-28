@@ -11,6 +11,7 @@ class KahootClient:
         self.connected = False
         self.player_name = ""
         self.has_answered = False
+        self.name_accepted = False  # Flag per tracciare se il nome è stato accettato
         
         # Finestra principale
         self.root = tk.Tk()
@@ -260,18 +261,13 @@ class KahootClient:
         self.players_listbox.config(yscrollcommand=players_scrollbar.set)
         players_scrollbar.config(command=self.players_listbox.yview)
         
-        # Bottone start
-        self.start_btn = tk.Button(
+        # Messaggio di attesa (sostituisce il bottone start)
+        self.waiting_label = tk.Label(
             main_frame,
-            text="🎯 Inizia Gioco Ora",
-            font=('Arial', 16, 'bold'),
-            bg='#9b59b6',
-            fg='white',
-            command=self.start_game,
-            cursor='hand2',
-            relief=tk.FLAT,
-            padx=30,
-            pady=10
+            text="⏳ In attesa dell'avvio automatico del gioco...",
+            font=('Arial', 14, 'bold'),
+            fg='#f39c12',
+            bg='#1a1a2e'
         )
         
     def connect_to_server(self):
@@ -282,33 +278,42 @@ class KahootClient:
             self.socket.connect((server_host, 12345))
             self.connected = True
             
-            # Chiedi nome giocatore
-            self.player_name = simpledialog.askstring(
-                "👤 Nome Giocatore", 
-                "Inserisci il tuo nome:",
-                parent=self.root
-            )
-            
-            if not self.player_name:
-                self.player_name = f"Giocatore{int(time.time()) % 1000}"
-            
-            # Invia richiesta di join
-            self.send_message({
-                'type': 'join',
-                'name': self.player_name
-            })
-            
             # Avvia thread per ricevere messaggi
             receive_thread = threading.Thread(target=self.receive_messages)
             receive_thread.daemon = True
             receive_thread.start()
             
-            self.status_label.config(text=f"✅ Connesso come {self.player_name}", fg='#4CAF50')
-            self.connect_btn.config(state=tk.DISABLED, text="Connesso", bg='#95a5a6')
+            # Chiedi nome giocatore con validazione
+            self.ask_for_name()
             
         except Exception as e:
             messagebox.showerror("❌ Errore", f"Impossibile connettersi al server:\n{e}")
             self.connected = False
+    
+    def ask_for_name(self):
+        """Chiede il nome al giocatore e lo invia al server"""
+        self.name_accepted = False
+        
+        # Chiedi nome giocatore
+        self.player_name = simpledialog.askstring(
+            "👤 Nome Giocatore", 
+            "Inserisci il tuo nome:",
+            parent=self.root
+        )
+        
+        if not self.player_name:
+            # Se l'utente cancella, disconnetti
+            if self.socket:
+                self.socket.close()
+            self.connected = False
+            self.status_label.config(text="❌ Non connesso", fg='#ff6b6b')
+            return
+        
+        # Invia richiesta di join
+        self.send_message({
+            'type': 'join',
+            'name': self.player_name
+        })
     
     def receive_messages(self):
         try:
@@ -324,14 +329,23 @@ class KahootClient:
             if self.connected:
                 messagebox.showerror("❌ Errore", f"Connessione persa:\n{e}")
                 self.connected = False
+                self.status_label.config(text="❌ Non connesso", fg='#ff6b6b')
     
     def handle_message(self, message):
         msg_type = message.get('type')
         
-        if msg_type == 'joined':
+        if msg_type == 'name_taken':
+            # Nome già in uso, chiedi un altro nome
+            messagebox.showerror("❌ Nome non disponibile", message.get('message', 'Nome già in uso'))
+            self.root.after(100, self.ask_for_name)  # Usa after per evitare problemi di threading
+            
+        elif msg_type == 'joined':
+            self.name_accepted = True
             self.update_players_list(message.get('players', []))
             self.game_frame.pack(fill=tk.BOTH, expand=True)
-            self.start_btn.pack(pady=15)
+            self.waiting_label.pack(pady=15)  # Mostra messaggio di attesa invece del bottone
+            self.status_label.config(text=f"✅ Connesso come {self.player_name}", fg='#4CAF50')
+            self.connect_btn.config(state=tk.DISABLED, text="Connesso", bg='#95a5a6')
             
         elif msg_type == 'player_joined' or msg_type == 'player_left':
             self.update_players_list(message.get('players', []))
@@ -340,12 +354,16 @@ class KahootClient:
             seconds = message.get('seconds', 0)
             self.countdown_text.set(f"⏰ Avvio automatico in {seconds} secondi...")
             self.countdown_frame.pack(pady=10)
+            self.waiting_label.pack_forget()  # Nascondi messaggio di attesa durante countdown
             
         elif msg_type == 'countdown_cancelled':
             self.countdown_frame.pack_forget()
+            if self.connected:
+                self.waiting_label.pack(pady=15)  # Mostra di nuovo messaggio di attesa
             
         elif msg_type == 'question':
             self.countdown_frame.pack_forget()
+            self.waiting_label.pack_forget()
             self.show_question(message)
             
         elif msg_type == 'answer_received':
@@ -556,12 +574,26 @@ class KahootClient:
             padx=30,
             pady=10
         ).pack(pady=20)
+        
+        # Reset dell'interfaccia per permettere un nuovo gioco
+        self.reset_game_interface()
     
-    def start_game(self):
+    def reset_game_interface(self):
+        """Reset dell'interfaccia dopo la fine del gioco"""
+        # Reset variabili
+        self.current_question.set("")
+        self.time_left.set("")
+        self.score.set("Punteggio: 0")
+        self.answer_status.set("")
+        self.has_answered = False
+        
+        # Reset bottoni risposta
+        for btn in self.answer_buttons:
+            btn.config(text="", state=tk.DISABLED, bg='#95a5a6')
+        
+        # Mostra di nuovo il messaggio di attesa se connesso
         if self.connected:
-            self.send_message({'type': 'start_game'})
-            self.start_btn.pack_forget()
-            self.countdown_frame.pack_forget()
+            self.waiting_label.pack(pady=15)
     
     def send_message(self, message):
         if self.connected and self.socket:
@@ -569,6 +601,7 @@ class KahootClient:
                 self.socket.send(json.dumps(message).encode('utf-8'))
             except:
                 self.connected = False
+                self.status_label.config(text="❌ Non connesso", fg='#ff6b6b')
     
     def run(self):
         self.root.protocol("WM_DELETE_WINDOW", self.on_closing)

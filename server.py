@@ -50,6 +50,11 @@ class KahootServer:
         
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    
+    def is_name_taken(self, name):
+        """Controlla se il nome è già in uso"""
+        existing_names = [client['name'].lower() for client in self.clients.values()]
+        return name.lower() in existing_names
         
     def start_server(self):
         try:
@@ -94,6 +99,15 @@ class KahootServer:
         
         if msg_type == 'join':
             name = message.get('name', 'Anonimo')
+            
+            # Controlla se il nome è già in uso
+            if self.is_name_taken(name):
+                self.send_to_client(client_socket, {
+                    'type': 'name_taken',
+                    'message': f'Il nome "{name}" è già in uso. Scegli un altro nome.'
+                })
+                return
+            
             self.clients[client_socket] = {'name': name, 'score': 0}
             print(f"👤 {name} si è unito al gioco")
             
@@ -301,6 +315,14 @@ class KahootServer:
         print("Classifica finale:")
         for i, player in enumerate(leaderboard, 1):
             print(f"{i}. {player['name']}: {player['score']} punti")
+        
+        # Reset dello stato del server per permettere un nuovo gioco
+        self.game_state = 'waiting'
+        self.current_question = 0
+        
+        # Reset punteggi di tutti i client
+        for client_data in self.clients.values():
+            client_data['score'] = 0
     
     def send_to_client(self, client_socket, message):
         try:
