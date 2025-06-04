@@ -287,6 +287,16 @@ class KahootServer:
         
         if msg_type == 'join':
             name = message.get('name', 'Anonimo')
+            
+            # Controlla se il nome è già in uso
+            existing_names = [client['name'] for client in self.clients.values()]
+            if name in existing_names:
+                self.send_to_client(client_socket, {
+                    'type': 'name_taken',
+                    'message': f'Il nome "{name}" è già in uso. Scegli un altro nome.'
+                })
+                return
+            
             self.clients[client_socket] = {'name': name, 'score': 0}
             print(f"👤 {name} si è unito al gioco")
             

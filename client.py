@@ -310,6 +310,35 @@ class KahootClient:
             messagebox.showerror("❌ Errore", f"Impossibile connettersi al server:\n{e}")
             self.connected = False
 
+    def connect_to_server_with_name(self, name):
+        """Connette al server con un nome specifico"""
+        server_host = self.server_entry.get() or "localhost"
+
+        try:
+            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.socket.connect((server_host, 12345))
+            self.connected = True
+
+            self.player_name = name
+
+            # Invia richiesta di join
+            self.send_message({
+                'type': 'join',
+                'name': self.player_name
+            })
+
+            # Avvia thread per ricevere messaggi
+            receive_thread = threading.Thread(target=self.receive_messages)
+            receive_thread.daemon = True
+            receive_thread.start()
+
+            self.status_label.config(text=f"✅ Connesso come {self.player_name}", fg='#4CAF50')
+            self.connect_btn.config(state=tk.DISABLED, text="Connesso", bg='#95a5a6')
+
+        except Exception as e:
+            messagebox.showerror("❌ Errore", f"Impossibile connettersi al server:\n{e}")
+            self.connected = False
+
     def receive_messages(self):
         try:
             while self.connected:
@@ -373,6 +402,32 @@ class KahootClient:
 
         elif msg_type == 'game_finished':
             self.show_final_results(message)
+
+        elif msg_type == 'name_taken':
+            # Nome già in uso, chiedi un nuovo nome
+            error_message = message.get('message', 'Nome già in uso')
+            messagebox.showerror("❌ Nome non disponibile", error_message)
+            
+            # Chiudi la connessione attuale
+            if self.socket:
+                self.socket.close()
+            self.connected = False
+            
+            # Reset UI
+            self.status_label.config(text="❌ Non connesso", fg='#ff6b6b')
+            self.connect_btn.config(state=tk.NORMAL, text="🚀 Connetti", bg='#4CAF50')
+            
+            # Chiedi un nuovo nome
+            new_name = simpledialog.askstring(
+                "👤 Scegli un altro nome",
+                "Il nome inserito è già in uso.\nInserisci un nome diverso:",
+                parent=self.root
+            )
+            
+            if new_name:
+                self.player_name = new_name
+                # Riprova la connessione automaticamente
+                self.connect_to_server_with_name(new_name)
 
     def update_players_list(self, players):
         self.players_listbox.delete(0, tk.END)
