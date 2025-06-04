@@ -216,7 +216,7 @@ class KahootServer:
         
     def select_category(self):
         """Permette di scegliere la categoria delle domande"""
-        print("\n🎯 SELEZIONE CATEGORIA QUIZ")
+        print("\nSELEZIONE CATEGORIA QUIZ")
         print("=" * 40)
         categories = list(self.question_categories.keys())
         
@@ -232,13 +232,13 @@ class KahootServer:
                     if 1 <= choice_num <= len(categories):
                         self.selected_category = categories[choice_num - 1]
                         self.questions = self.question_categories[self.selected_category].copy()
-                        print(f"\n✅ Categoria selezionata: {self.selected_category}")
-                        print(f"📚 Domande caricate: {len(self.questions)}")
+                        print(f"\nCategoria selezionata: {self.selected_category}")
+                        print(f"Domande caricate: {len(self.questions)}")
                         break
                 
-                print("❌ Scelta non valida. Riprova.")
+                print("Scelta non valida. Riprova.")
             except (ValueError, KeyboardInterrupt):
-                print("❌ Input non valido. Riprova.")
+                print("Input non valido. Riprova.")
     
     def start_server(self):
         # Selezione categoria prima di avviare il server
@@ -247,13 +247,13 @@ class KahootServer:
         try:
             self.socket.bind((self.host, self.port))
             self.socket.listen(10)
-            print(f"\n🚀 Server Kahoot avviato su {self.host}:{self.port}")
-            print(f"🎮 Categoria: {self.selected_category}")
-            print("⏳ In attesa di giocatori...")
+            print(f"\nServer Kahoot avviato su {self.host}:{self.port}")
+            print(f"Categoria: {self.selected_category}")
+            print("In attesa di giocatori...")
             
             while True:
                 client_socket, address = self.socket.accept()
-                print(f"👤 Nuovo giocatore connesso da {address}")
+                print(f"Nuovo giocatore connesso da {address}")
                 
                 client_thread = threading.Thread(
                     target=self.handle_client, 
@@ -263,7 +263,7 @@ class KahootServer:
                 client_thread.start()
                 
         except Exception as e:
-            print(f"❌ Errore server: {e}")
+            print(f"Errore server: {e}")
         finally:
             self.socket.close()
     
@@ -278,7 +278,7 @@ class KahootServer:
                 self.process_message(client_socket, message)
                 
         except Exception as e:
-            print(f"❌ Errore con client: {e}")
+            print(f"Errore con client: {e}")
         finally:
             self.remove_client(client_socket)
     
@@ -304,10 +304,11 @@ class KahootServer:
                     'type': 'name_taken',
                     'message': f'Il nome "{name}" è già in uso. Scegli un altro nome.'
                 })
+                client_socket.close()
                 return
             
             self.clients[client_socket] = {'name': name, 'score': 0}
-            print(f"👤 {name} si è unito al gioco")
+            print(f"{name} si è unito al gioco")
             
             # Invia stato attuale
             self.send_to_client(client_socket, {
@@ -343,7 +344,7 @@ class KahootServer:
     def start_auto_countdown(self):
         """Avvia il countdown automatico di 30 secondi"""
         self.countdown_active = True
-        print("⏰ Countdown automatico iniziato: 30 secondi")
+        print("Countdown automatico iniziato: 30 secondi")
         
         def countdown():
             for i in range(30, 0, -1):
@@ -357,14 +358,14 @@ class KahootServer:
                 })
                 
                 if i <= 10:
-                    print(f"🚀 Avvio automatico in {i} secondi...")
+                    print(f"Avvio automatico in {i} secondi...")
                 elif i % 5 == 0:
-                    print(f"⏰ Avvio automatico in {i} secondi...")
+                    print(f"Avvio automatico in {i} secondi...")
                 
                 time.sleep(1)
             
             if self.countdown_active and len(self.clients) >= 1:
-                print("🎮 Avvio automatico del gioco!")
+                print("Avvio automatico del gioco!")
                 self.start_game()
         
         self.auto_start_timer = threading.Thread(target=countdown)
@@ -382,7 +383,7 @@ class KahootServer:
         self.cancel_auto_start()
         self.game_state = 'question'
         self.current_question = 0
-        print(f"🎮 Gioco iniziato! Categoria: {self.selected_category}")
+        print(f"Gioco iniziato! Categoria: {self.selected_category}")
         
         # Reset punteggi
         for client_data in self.clients.values():
@@ -392,7 +393,7 @@ class KahootServer:
     
     def restart_game(self):
         """Riavvia il gioco con countdown di 30 secondi"""
-        print("🔄 Riavvio del gioco...")
+        print("Riavvio del gioco...")
         self.game_state = 'waiting'  # Torna allo stato di attesa
         self.current_question = 0
         
@@ -407,7 +408,7 @@ class KahootServer:
         })
         
         # Avvia il countdown di 30 secondi
-        print("⏰ Avvio countdown per nuovo gioco...")
+        print("Avvio countdown per nuovo gioco...")
         threading.Timer(2.0, self.start_auto_countdown).start()
     
     def send_question(self):
@@ -429,7 +430,7 @@ class KahootServer:
         }
         
         self.broadcast(message)
-        print(f"❓ Domanda {self.current_question + 1}: {question_data['question']}")
+        print(f"Domanda {self.current_question + 1}: {question_data['question']}")
         
         # Timer per la domanda
         timer_thread = threading.Thread(target=self.question_timer, args=(question_data['time_limit'],))
@@ -440,7 +441,7 @@ class KahootServer:
         """Timer che aspetta il tempo limite e poi mostra i risultati"""
         time.sleep(time_limit)
         if self.game_state == 'question':
-            print("⏰ Tempo scaduto! Mostrando risultati...")
+            print("Tempo scaduto! Mostrando risultati...")
             self.show_results()
     
     def handle_answer(self, client_socket, message):
@@ -466,10 +467,10 @@ class KahootServer:
             self.clients[client_socket]['score'] += points_earned
             
             player_name = self.clients[client_socket]['name']
-            print(f"✅ {player_name} ha risposto correttamente in {response_time:.1f}s! (+{points_earned} punti)")
+            print(f"{player_name} ha risposto correttamente in {response_time:.1f}s! (+{points_earned} punti)")
         else:
             player_name = self.clients[client_socket]['name']
-            print(f"❌ {player_name} ha risposto sbagliato in {response_time:.1f}s")
+            print(f"{player_name} ha risposto sbagliato in {response_time:.1f}s")
         
         # Invia conferma risposta al client
         self.send_to_client(client_socket, {
@@ -536,12 +537,11 @@ class KahootServer:
         }
         
         self.broadcast(message)
-        print("🏁 Gioco terminato!")
-        print(f"🎯 Categoria: {self.selected_category}")
-        print("🏆 Classifica finale:")
+        print("Gioco terminato!")
+        print(f"Categoria: {self.selected_category}")
+        print("Classifica finale:")
         for i, player in enumerate(leaderboard, 1):
-            medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "🏅"
-            print(f"{medal} {i}. {player['name']}: {player['score']} punti")
+            print(f"{i}. {player['name']}: {player['score']} punti")
     
     def send_to_client(self, client_socket, message):
         try:
@@ -562,7 +562,7 @@ class KahootServer:
         if client_socket in self.clients:
             name = self.clients[client_socket]['name']
             del self.clients[client_socket]
-            print(f"👋 {name} ha lasciato il gioco")
+            print(f"{name} ha lasciato il gioco")
             
             # Notifica altri giocatori
             self.broadcast({
@@ -581,7 +581,7 @@ class KahootServer:
             pass
 
 if __name__ == "__main__":
-    print("🎮 KAHOOT SERVER")
+    print("KAHOOT SERVER")
     print("=" * 30)
     host = input("Inserisci l'host (default: localhost): ").strip() or 'localhost'
     
@@ -589,4 +589,4 @@ if __name__ == "__main__":
     try:
         server.start_server()
     except KeyboardInterrupt:
-        print("\n🛑 Server fermato")
+        print("\nServer fermato")
