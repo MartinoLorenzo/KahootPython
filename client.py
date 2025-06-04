@@ -13,6 +13,7 @@ class KahootClient:
         self.player_name = ""
         self.has_answered = False
         self.game_started = False
+        self.current_category = ""
 
         # Finestra principale
         self.root = tk.Tk()
@@ -27,6 +28,7 @@ class KahootClient:
         self.score = tk.StringVar(value="Punteggio: 0")
         self.countdown_text = tk.StringVar()
         self.answer_status = tk.StringVar()
+        self.category_text = tk.StringVar()
 
         self.setup_ui()
 
@@ -56,6 +58,16 @@ class KahootClient:
             bg='#1a1a2e'
         )
         subtitle_label.pack()
+
+        # Categoria
+        self.category_label = tk.Label(
+            title_frame,
+            textvariable=self.category_text,
+            font=('Arial', 12, 'bold'),
+            fg='#f39c12',
+            bg='#1a1a2e'
+        )
+        self.category_label.pack(pady=(5, 0))
 
         # Frame connessione
         self.connection_frame = tk.Frame(main_frame, bg='#16213e', relief=tk.RAISED, bd=2)
@@ -262,8 +274,6 @@ class KahootClient:
         self.players_listbox.config(yscrollcommand=players_scrollbar.set)
         players_scrollbar.config(command=self.players_listbox.yview)
 
-        # RIMOSSO COMPLETAMENTE IL BOTTONE START
-
     def connect_to_server(self):
         server_host = self.server_entry.get() or "localhost"
 
@@ -319,7 +329,11 @@ class KahootClient:
         msg_type = message.get('type')
 
         if msg_type == 'joined':
-            # Mostra solo la lista giocatori, NESSUN bottone start
+            # Mostra categoria e lista giocatori
+            category = message.get('category', '')
+            if category:
+                self.current_category = category
+                self.category_text.set(f"🎯 Categoria: {category}")
             self.update_players_list(message.get('players', []))
 
         elif msg_type == 'player_joined' or msg_type == 'player_left':
@@ -342,6 +356,15 @@ class KahootClient:
                 self.game_started = True
             self.show_question(message)
 
+        elif msg_type == 'game_restarted':
+            # Riavvio del gioco
+            category = message.get('category', '')
+            if category:
+                self.current_category = category
+                self.category_text.set(f"🎯 Categoria: {category}")
+            self.answer_status.set("🔄 Nuovo gioco iniziato!")
+            self.score.set("💰 Punteggio: 0")
+
         elif msg_type == 'answer_received':
             self.handle_answer_feedback(message)
 
@@ -350,8 +373,6 @@ class KahootClient:
 
         elif msg_type == 'game_finished':
             self.show_final_results(message)
-            # Reset per eventuale nuovo gioco
-            self.game_started = False
 
     def update_players_list(self, players):
         self.players_listbox.delete(0, tk.END)
@@ -451,8 +472,12 @@ class KahootClient:
         explanation = message.get('explanation', '')
         leaderboard = message.get('leaderboard', [])
 
-        # Evidenzia risposta corretta
-        self.answer_buttons[correct_answer].config(bg='#27ae60')
+        # Evidenzia risposta corretta in verde e le altre in rosso
+        for i, btn in enumerate(self.answer_buttons):
+            if i == correct_answer:
+                btn.config(bg='#27ae60')  # Verde per risposta corretta
+            else:
+                btn.config(bg='#e74c3c')  # Rosso per risposte sbagliate
 
         # Aggiorna punteggio
         for player in leaderboard:
@@ -467,11 +492,12 @@ class KahootClient:
     def show_final_results(self, message):
         leaderboard = message.get('leaderboard', [])
         winner = message.get('winner', 'Nessuno')
+        category = message.get('category', self.current_category)
 
         # Crea finestra risultati
         results_window = tk.Toplevel(self.root)
         results_window.title("🏆 Risultati Finali")
-        results_window.geometry("500x600")
+        results_window.geometry("500x700")
         results_window.configure(bg='#1a1a2e')
         results_window.resizable(False, False)
 
@@ -480,7 +506,7 @@ class KahootClient:
         results_window.grab_set()
 
         # Header
-        header_frame = tk.Frame(results_window, bg='#2c3e50', height=100)
+        header_frame = tk.Frame(results_window, bg='#2c3e50', height=120)
         header_frame.pack(fill=tk.X)
         header_frame.pack_propagate(False)
 
@@ -491,6 +517,15 @@ class KahootClient:
             fg='#f39c12',
             bg='#2c3e50'
         ).pack(expand=True)
+
+        # Categoria
+        tk.Label(
+            header_frame,
+            text=f"🎯 {category}",
+            font=('Arial', 12, 'bold'),
+            fg='#4ecdc4',
+            bg='#2c3e50'
+        ).pack()
 
         # Vincitore
         winner_frame = tk.Frame(results_window, bg='#1a1a2e')
@@ -540,18 +575,54 @@ class KahootClient:
                 bg='#2c3e50'
             ).pack(side=tk.RIGHT, padx=10, pady=10)
 
-        # Bottone chiudi
+        # Frame bottoni
+        buttons_frame = tk.Frame(results_window, bg='#1a1a2e')
+        buttons_frame.pack(fill=tk.X, pady=20)
+
+        # Bottone Rigioca
         tk.Button(
-            results_window,
+            buttons_frame,
+            text="🔄 Rigioca",
+            font=('Arial', 12, 'bold'),
+            bg='#4CAF50',
+            fg='white',
+            command=lambda: self.restart_game(results_window),
+            relief=tk.FLAT,
+            padx=30,
+            pady=10
+        ).pack(side=tk.LEFT, padx=(50, 10))
+
+        # Bottone Chiudi
+        tk.Button(
+            buttons_frame,
             text="🚪 Chiudi",
             font=('Arial', 12, 'bold'),
             bg='#e74c3c',
             fg='white',
-            command=results_window.destroy,
+            command=lambda: self.close_all_windows(results_window),
             relief=tk.FLAT,
             padx=30,
             pady=10
-        ).pack(pady=20)
+        ).pack(side=tk.RIGHT, padx=(10, 50))
+
+    def restart_game(self, results_window):
+        """Riavvia il gioco"""
+        if self.connected:
+            self.send_message({'type': 'restart_game'})
+            results_window.destroy()
+            
+            # Reset UI per nuovo gioco
+            self.game_started = False
+            self.game_frame.pack_forget()
+            self.answer_status.set("")
+            self.score.set("💰 Punteggio: 0")
+            
+            messagebox.showinfo("🔄 Riavvio", "Nuovo gioco avviato!")
+
+    def close_all_windows(self, results_window):
+        """Chiude tutte le finestre"""
+        results_window.destroy()
+        self.on_closing()
 
     def send_message(self, message):
         if self.connected and self.socket:
