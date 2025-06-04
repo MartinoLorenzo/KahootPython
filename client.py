@@ -386,13 +386,19 @@ class KahootClient:
             self.show_question(message)
 
         elif msg_type == 'game_restarted':
-            # Riavvio del gioco
+            # Riavvio del gioco - torna al countdown
             category = message.get('category', '')
             if category:
                 self.current_category = category
                 self.category_text.set(f"🎯 Categoria: {category}")
-            self.answer_status.set("🔄 Nuovo gioco iniziato!")
+            
+            # Reset UI per nuovo gioco
+            self.game_started = False
+            self.game_frame.pack_forget()
+            self.answer_status.set("")
             self.score.set("💰 Punteggio: 0")
+            
+            messagebox.showinfo("🔄 Nuovo Gioco", "Nuovo gioco avviato!\nCountdown di 30 secondi iniziato.")
 
         elif msg_type == 'answer_received':
             self.handle_answer_feedback(message)
@@ -428,6 +434,20 @@ class KahootClient:
                 self.player_name = new_name
                 # Riprova la connessione automaticamente
                 self.connect_to_server_with_name(new_name)
+
+        elif msg_type == 'game_in_progress':
+            # Partita già in corso
+            error_message = message.get('message', 'Partita in corso')
+            messagebox.showwarning("⏳ Partita in corso", error_message)
+            
+            # Chiudi la connessione
+            if self.socket:
+                self.socket.close()
+            self.connected = False
+            
+            # Reset UI
+            self.status_label.config(text="⏳ Partita in corso - Riprova più tardi", fg='#f39c12')
+            self.connect_btn.config(state=tk.NORMAL, text="🚀 Connetti", bg='#4CAF50')
 
     def update_players_list(self, players):
         self.players_listbox.delete(0, tk.END)
@@ -661,18 +681,10 @@ class KahootClient:
         ).pack(side=tk.RIGHT, padx=(10, 50))
 
     def restart_game(self, results_window):
-        """Riavvia il gioco"""
+        """Riavvia il gioco con countdown di 30 secondi"""
         if self.connected:
             self.send_message({'type': 'restart_game'})
             results_window.destroy()
-            
-            # Reset UI per nuovo gioco
-            self.game_started = False
-            self.game_frame.pack_forget()
-            self.answer_status.set("")
-            self.score.set("💰 Punteggio: 0")
-            
-            messagebox.showinfo("🔄 Riavvio", "Nuovo gioco avviato!")
 
     def close_all_windows(self, results_window):
         """Chiude tutte le finestre"""

@@ -288,6 +288,15 @@ class KahootServer:
         if msg_type == 'join':
             name = message.get('name', 'Anonimo')
             
+            # Controlla se la partita è già in corso
+            if self.game_state != 'waiting':
+                self.send_to_client(client_socket, {
+                    'type': 'game_in_progress',
+                    'message': 'La partita è già in corso. Attendi che finisca per unirti al prossimo gioco.'
+                })
+                client_socket.close()
+                return
+            
             # Controlla se il nome è già in uso
             existing_names = [client['name'] for client in self.clients.values()]
             if name in existing_names:
@@ -382,9 +391,9 @@ class KahootServer:
         self.send_question()
     
     def restart_game(self):
-        """Riavvia il gioco con le stesse domande"""
+        """Riavvia il gioco con countdown di 30 secondi"""
         print("🔄 Riavvio del gioco...")
-        self.game_state = 'question'
+        self.game_state = 'waiting'  # Torna allo stato di attesa
         self.current_question = 0
         
         # Reset punteggi
@@ -397,8 +406,9 @@ class KahootServer:
             'category': self.selected_category
         })
         
-        # Avvia nuova partita dopo 2 secondi
-        threading.Timer(2.0, self.send_question).start()
+        # Avvia il countdown di 30 secondi
+        print("⏰ Avvio countdown per nuovo gioco...")
+        threading.Timer(2.0, self.start_auto_countdown).start()
     
     def send_question(self):
         if self.current_question >= len(self.questions):
